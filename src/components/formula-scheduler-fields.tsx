@@ -1,0 +1,11 @@
+import { Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+export type FormulaSchedulerMode = "every_x_hours" | "daily_times" | "manual";
+
+export function FormulaSchedulerFields({ mode, intervalHours, dailyTimes, onModeChange, onIntervalChange, onDailyTimesChange }: { mode: FormulaSchedulerMode; intervalHours: number; dailyTimes: string[]; onModeChange: (mode: FormulaSchedulerMode) => void; onIntervalChange: (hours: number) => void; onDailyTimesChange: (times: string[]) => void }) {
+  return <div className="rounded-md border p-4 space-y-3"><div><div className="font-medium text-sm">App Scheduler</div><div className="text-xs text-muted-foreground">Controls when this formula fires. Daily times are stored and evaluated in UTC.</div></div><Select value={mode} onValueChange={(value) => onModeChange(value as FormulaSchedulerMode)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="every_x_hours">Every X hours</SelectItem><SelectItem value="daily_times">Daily at time(s) — UTC</SelectItem><SelectItem value="manual">Manual only</SelectItem></SelectContent></Select>{mode === "every_x_hours" && <div className="space-y-1"><Label>Repeat every (hours)</Label><Input type="number" min={1} max={8760} value={intervalHours} onChange={(event) => onIntervalChange(Math.max(1, Number(event.target.value) || 1))} /></div>}{mode === "daily_times" && <div className="space-y-2"><Label>Daily UTC times</Label>{dailyTimes.map((time, index) => <div className="flex gap-2" key={`${index}-${time}`}><Input type="time" value={time} onChange={(event) => onDailyTimesChange(dailyTimes.map((item, i) => i === index ? event.target.value : item))} /><Button type="button" variant="ghost" size="icon" onClick={() => onDailyTimesChange(dailyTimes.filter((_, i) => i !== index))} disabled={dailyTimes.length <= 1}><Trash2 className="h-4 w-4" /></Button></div>)}<Button type="button" variant="outline" size="sm" onClick={() => onDailyTimesChange([...dailyTimes, "09:00"])}><Plus className="h-4 w-4 mr-1" /> Add time</Button></div>}</div>;
+}
