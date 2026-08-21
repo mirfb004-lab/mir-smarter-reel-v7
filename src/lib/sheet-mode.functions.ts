@@ -9,6 +9,12 @@ import { addChannelUsageLabels } from "./channel-usage.server";
 const sheetId = z.string().uuid();
 const channelId = z.string().uuid();
 const rowId = z.string().uuid();
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 const selectionRule = z.enum([
   "first_ready",
   "random_ready",
@@ -352,12 +358,16 @@ export const getSheetModeSheet = createServerFn({ method: "GET" })
     const rows = rowsResult.data ?? [];
     const statusesByRow = new Map<string, SheetModeChannelStatus[]>();
     if (rows.length) {
-      const { data: statuses, error } = await context.supabase
-        .from("sheet_mode_row_channel_status")
-        .select("*")
-        .in("row_id", rows.map((row) => row.id));
-      if (error) throw new Error(error.message);
-      for (const status of statuses ?? []) {
+      const statuses: SheetModeChannelStatus[] = [];
+      for (const batch of chunk(rows.map((row) => row.id), 100)) {
+        const { data, error } = await context.supabase
+          .from("sheet_mode_row_channel_status")
+          .select("*")
+          .in("row_id", batch);
+        if (error) throw new Error(error.message);
+        statuses.push(...(data ?? []));
+      }
+      for (const status of statuses) {
         const list = statusesByRow.get(status.row_id) ?? [];
         list.push(status);
         statusesByRow.set(status.row_id, list);
@@ -608,7 +618,10 @@ export const removeDuplicateSheetModeRows = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     const seen = new Set<string>(); const ids: string[] = [];
     for (const row of rows ?? []) { const key = row.video_url.trim().toLowerCase(); if (!key) continue; if (seen.has(key)) ids.push(row.id); else seen.add(key); }
-    if (ids.length) { const result = await context.supabase.from("sheet_mode_rows").delete().in("id", ids); if (result.error) throw new Error(result.error.message); }
+    for (const batch of chunk(ids, 500)) {
+      const result = await context.supabase.from("sheet_mode_rows").delete().in("id", batch);
+      if (result.error) throw new Error(result.error.message);
+    }
     return { removed: ids.length };
   });
 
@@ -620,7 +633,14 @@ export const retryFailedSheetModeRows = createServerFn({ method: "POST" })
     const { data: rows, error } = await context.supabase.from("sheet_mode_rows").select("id").eq("sheet_id", data.sheet_id);
     if (error) throw new Error(error.message);
     const ids = (rows ?? []).map((row) => row.id);
-    if (ids.length) { const result = await context.supabase.from("sheet_mode_row_channel_status").update({ status: "F", last_error: null }).in("row_id", ids).not("last_error", "is", null); if (result.error) throw new Error(result.error.message); }
+    for (const batch of chunk(ids, 500)) {
+      const result = await context.supabase
+        .from("sheet_mode_row_channel_status")
+        .update({ status: "F", last_error: null })
+        .in("row_id", batch)
+        .not("last_error", "is", null);
+      if (result.error) throw new Error(result.error.message);
+    }
     return { reset: ids.length };
   });
 
@@ -674,7 +694,7 @@ export const bulkUpdateSheetModeCells = createServerFn({ method: "POST" })
 const fillLinesSchema = z.object({ sheet_id: sheetId, lines: z.array(z.string().max(20000)).min(1).max(5000) });
 
 async function fillSheetModeColumn(sb: any, sheetIdValue: string, column: "caption" | "video_url", lines: string[]) {
-  const { data: rows, error } = await sb.from("sheet_mode_rows").select("id,position,caption,video_url").eq("sheet_id", sheetIdValue).order("position", { ascending: true });
+  const { data: rows, error } = await sb.from("sheet_mode_rows").select("id,sheet_id,position,caption,video_url,priority,weight,status").eq("sheet_id", sheetIdValue).order("position", { ascending: true });
   if (error) throw new Error(error.message);
   const skipped: Array<{ line: number; message: string }> = [];
   const valid: string[] = [];
@@ -685,13 +705,22 @@ async function fillSheetModeColumn(sb: any, sheetIdValue: string, column: "capti
     else valid.push(value);
   });
   const emptyRows = (rows ?? []).filter((row: any) => !String(row[column] ?? "").trim());
-  let filled = 0;
   const updates = valid.slice(0, emptyRows.length);
-  for (let index = 0; index < updates.length; index++) {
-    const result = await sb.from("sheet_mode_rows").update({ [column]: updates[index] }).eq("id", emptyRows[index].id).eq("sheet_id", sheetIdValue);
+  for (const batch of chunk(updates.map((value, index) => ({ row: emptyRows[index], value })), 500)) {
+    const payload = batch.map(({ row, value }) => ({
+      id: row.id,
+      sheet_id: row.sheet_id,
+      position: row.position,
+      caption: column === "caption" ? value : row.caption,
+      video_url: column === "video_url" ? value : row.video_url,
+      priority: row.priority,
+      weight: row.weight,
+      status: row.status,
+    }));
+    const result = await sb.from("sheet_mode_rows").upsert(payload, { onConflict: "id" });
     if (result.error) throw new Error(result.error.message);
-    filled++;
   }
+  const filled = updates.length;
   const overflow = valid.slice(updates.length);
   const inserted = await insertImportedRows(
     sb,
