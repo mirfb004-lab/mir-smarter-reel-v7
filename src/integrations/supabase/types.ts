@@ -2157,6 +2157,10 @@ export type Database = {
         Args: { _next_run_at: string; _now: string; _sheet_id: string }
         Returns: boolean
       }
+      compute_next_daily_run_at: {
+        Args: { _now: string; _times: string[]; _tz: string }
+        Returns: string
+      }
       move_recurring_schedule_item: {
         Args: { _direction: string; _item_id: string }
         Returns: boolean
