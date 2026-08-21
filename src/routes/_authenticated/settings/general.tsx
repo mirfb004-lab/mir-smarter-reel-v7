@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import { ThemeSettings } from "@/components/theme-settings";
 
 export const Route = createFileRoute("/_authenticated/settings/general")({ component: GeneralSettings });
 
@@ -46,6 +47,8 @@ function GeneralSettings() {
         <h1 className="text-2xl font-semibold tracking-tight">General</h1>
         <p className="text-sm text-muted-foreground">Retry, rate limits, analytics delay, profile.</p>
       </div>
+
+      <ThemeSettings />
 
       <Card>
         <CardHeader><CardTitle>Runtime</CardTitle><CardDescription>How the loop handles failures & pacing.</CardDescription></CardHeader>
