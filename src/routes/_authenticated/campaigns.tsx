@@ -60,9 +60,9 @@ function CampaignsPage() {
   const qc = useQueryClient();
   const activeId = useActiveCampaignId();
 
-  const { data: campaigns } = useQuery({ queryKey: ["campaigns"], queryFn: () => list() });
+  const { data: campaigns, isError: campaignsError } = useQuery({ queryKey: ["campaigns"], queryFn: () => list() });
   const activeCampaign = (campaigns ?? []).find((c) => c.id === activeId) as any;
-  const { data: samples } = useQuery({
+  const { data: samples, isError: samplesError } = useQuery({
     queryKey: ["sample-captions", activeId],
     queryFn: () => listSamples({ data: { campaign_id: activeId! } }),
     enabled: Boolean(activeId),
@@ -157,6 +157,10 @@ function CampaignsPage() {
     onSuccess: () => { toast.success("Sample caption deleted"); qc.invalidateQueries({ queryKey: ["sample-captions", activeId] }); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
+
+  if (campaignsError || samplesError) {
+    return <div className="text-sm text-destructive">Unable to load campaigns. Please try again.</div>;
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">

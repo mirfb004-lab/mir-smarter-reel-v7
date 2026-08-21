@@ -19,7 +19,7 @@ function GeneralSettings() {
   const updP = useServerFn(updateProfile);
   const qc = useQueryClient();
   const campaignId = useScopedCampaignId();
-  const { data } = useQuery({ queryKey: ["settings", campaignId], queryFn: () => get({ data: { campaign_id: campaignId } }) });
+  const { data, isError: settingsError } = useQuery({ queryKey: ["settings", campaignId], queryFn: () => get({ data: { campaign_id: campaignId } }) });
 
   const [g, setG] = useState<any>(null);
   const [p, setP] = useState<any>(null);
@@ -39,6 +39,7 @@ function GeneralSettings() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
+  if (settingsError) return <div className="text-sm text-destructive">Unable to load general settings. Please try again.</div>;
   if (!g || !p) return <div className="text-sm text-muted-foreground">Loading…</div>;
 
   return (

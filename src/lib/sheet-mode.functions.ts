@@ -746,25 +746,6 @@ export const fillSheetModeUrls = createServerFn({ method: "POST" })
     return fillSheetModeColumn(context.supabase, data.sheet_id, "video_url", data.lines);
   });
 
-export const updateSheetModeChannelCustomizationJson = updateSheetModeChannelCustomization;
-
-export const SHEET_MODE_TIKTOK_API_NOTE = "Buffer's API currently supports only TikTok isAiGenerated and title; privacy, comments, duet, and stitch controls are not sent.";
-
-export const SHEET_MODE_METADATA_FIELD_NOTE = "Instagram firstComment and Pinterest url are accepted by Buffer but currently not reliably persisted; they are intentionally not exposed as working fields.";
-
-export const SHEET_MODE_YOUTUBE_CATEGORIES = [
-  ["1", "Film & Animation"], ["2", "Autos & Vehicles"], ["10", "Music"], ["15", "Pets & Animals"],
-  ["17", "Sports"], ["19", "Travel & Events"], ["20", "Gaming"], ["22", "People & Blogs"],
-  ["23", "Comedy"], ["24", "Entertainment"], ["25", "News & Politics"], ["26", "Howto & Style"],
-  ["27", "Education"], ["28", "Science & Tech"], ["29", "Nonprofits & Activism"],
-] as const;
-
-export const SHEET_MODE_TIKTOK_FIELDS_AUDIT = {
-  uiFields: ["Privacy Level", "Allow Comments", "Allow Duet", "Allow Stitch"],
-  serverForwarding: "The current Reel Formula worker passes these values into the formula object, but buffer.server.ts does not serialize them into TikTok metadata; the current Buffer mapper returns no TikTok metadata for the Reel Formula path.",
-  recommendation: "Remove or relabel these controls only after user approval at the Part I checkpoint.",
-} as const;
-
 export const fillAllSheetModeCaptions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
