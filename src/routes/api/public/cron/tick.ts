@@ -1,15 +1,13 @@
 // Cron tick — called by pg_cron every 5 minutes.
 // Advances due schedules by running the orchestrator for each.
 import { createFileRoute } from "@tanstack/react-router";
+import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 export const Route = createFileRoute("/api/public/cron/tick")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        // Require the private scheduler invocation secret.
-        const apikey = request.headers.get("apikey");
-        if (!apikey) return new Response("Unauthorized", { status: 401 });
-        if (apikey !== process.env.CRON_INVOKE_SECRET) {
+        if (!isAuthorizedCronRequest(request)) {
           return new Response("Unauthorized", { status: 401 });
         }
 
