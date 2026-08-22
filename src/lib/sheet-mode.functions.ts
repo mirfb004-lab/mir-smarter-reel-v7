@@ -362,27 +362,31 @@ export const getSheetModeSheet = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ id: sheetId }).parse(d))
   .handler(async ({ data, context }) => {
     await assertSheetOwner(context.supabase, context.userId, data.id);
-    const [sheetResult, targetsResult, rowsResult] = await Promise.all([
+    const [sheetResult, targetsResult, rows] = await Promise.all([
       context.supabase.from("sheet_mode_sheets").select("*").eq("id", data.id).eq("user_id", context.userId).single(),
       context.supabase.from("sheet_mode_channel_targets").select("*").eq("sheet_id", data.id).order("added_at", { ascending: true }),
-      context.supabase.from("sheet_mode_rows").select("*").eq("sheet_id", data.id).order("position", { ascending: true }),
+      selectAll<any>((from, to) =>
+        context.supabase
+          .from("sheet_mode_rows")
+          .select("*")
+          .eq("sheet_id", data.id)
+          .order("position", { ascending: true })
+          .range(from, to) as any,
+      ),
     ]);
     if (sheetResult.error) throw new Error(sheetResult.error.message);
     if (targetsResult.error) throw new Error(targetsResult.error.message);
-    if (rowsResult.error) throw new Error(rowsResult.error.message);
 
-    const rows = rowsResult.data ?? [];
     const statusesByRow = new Map<string, SheetModeChannelStatus[]>();
     if (rows.length) {
-      const statuses: SheetModeChannelStatus[] = [];
-      for (const batch of chunk(rows.map((row) => row.id), 100)) {
-        const { data, error } = await context.supabase
+      const statuses = await selectAll<SheetModeChannelStatus>((from, to) =>
+        context.supabase
           .from("sheet_mode_row_channel_status")
-          .select("*")
-          .in("row_id", batch);
-        if (error) throw new Error(error.message);
-        statuses.push(...(data ?? []));
-      }
+          .select("*, sheet_mode_rows!inner(sheet_id)")
+          .eq("sheet_mode_rows.sheet_id", data.id)
+          .order("row_id", { ascending: true })
+          .range(from, to) as any,
+      );
       for (const status of statuses) {
         const list = statusesByRow.get(status.row_id) ?? [];
         list.push(status);
