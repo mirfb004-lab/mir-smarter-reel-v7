@@ -15,6 +15,22 @@ function chunk<T>(items: T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+// PostgREST caps a single response (default 1000 rows), so every full-sheet read
+// must page explicitly or large sheets silently truncate.
+const PAGE_SIZE = 1000;
+async function selectAll<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await build(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    out.push(...page);
+    if (page.length < PAGE_SIZE) return out;
+  }
+}
 const selectionRule = z.enum([
   "first_ready",
   "random_ready",
@@ -346,27 +362,31 @@ export const getSheetModeSheet = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ id: sheetId }).parse(d))
   .handler(async ({ data, context }) => {
     await assertSheetOwner(context.supabase, context.userId, data.id);
-    const [sheetResult, targetsResult, rowsResult] = await Promise.all([
+    const [sheetResult, targetsResult, rows] = await Promise.all([
       context.supabase.from("sheet_mode_sheets").select("*").eq("id", data.id).eq("user_id", context.userId).single(),
       context.supabase.from("sheet_mode_channel_targets").select("*").eq("sheet_id", data.id).order("added_at", { ascending: true }),
-      context.supabase.from("sheet_mode_rows").select("*").eq("sheet_id", data.id).order("position", { ascending: true }),
+      selectAll<any>((from, to) =>
+        context.supabase
+          .from("sheet_mode_rows")
+          .select("*")
+          .eq("sheet_id", data.id)
+          .order("position", { ascending: true })
+          .range(from, to) as any,
+      ),
     ]);
     if (sheetResult.error) throw new Error(sheetResult.error.message);
     if (targetsResult.error) throw new Error(targetsResult.error.message);
-    if (rowsResult.error) throw new Error(rowsResult.error.message);
 
-    const rows = rowsResult.data ?? [];
     const statusesByRow = new Map<string, SheetModeChannelStatus[]>();
-    if (rows.length) {
-      const statuses: SheetModeChannelStatus[] = [];
-      for (const batch of chunk(rows.map((row) => row.id), 100)) {
-        const { data, error } = await context.supabase
+    for (const batch of chunk(rows.map((row: any) => row.id), 200)) {
+      const statuses = await selectAll<SheetModeChannelStatus>((from, to) =>
+        context.supabase
           .from("sheet_mode_row_channel_status")
           .select("*")
-          .in("row_id", batch);
-        if (error) throw new Error(error.message);
-        statuses.push(...(data ?? []));
-      }
+          .in("row_id", batch)
+          .order("row_id", { ascending: true })
+          .range(from, to) as any,
+      );
       for (const status of statuses) {
         const list = statusesByRow.get(status.row_id) ?? [];
         list.push(status);
@@ -402,11 +422,12 @@ export const addSheetModeChannelTargets = createServerFn({ method: "POST" })
         removed_at: null,
       }, { onConflict: "sheet_id,buffer_connection_id,channel_id" }).select("id").single();
       if (error) throw new Error(error.message);
-      const { data: rows, error: rowsError } = await context.supabase.from("sheet_mode_rows").select("id").eq("sheet_id", data.sheet_id);
-      if (rowsError) throw new Error(rowsError.message);
-      if (rows?.length) {
+      const rows = await selectAll<{ id: string }>((from, to) =>
+        context.supabase.from("sheet_mode_rows").select("id").eq("sheet_id", data.sheet_id).order("position", { ascending: true }).range(from, to) as any,
+      );
+      for (const batch of chunk(rows, 500)) {
         const { error: statusError } = await context.supabase.from("sheet_mode_row_channel_status").upsert(
-          rows.map((row) => ({ row_id: row.id, channel_target_id: inserted.id, status: "F" })),
+          batch.map((row) => ({ row_id: row.id, channel_target_id: inserted.id, status: "F" })),
           { onConflict: "row_id,channel_target_id" },
         );
         if (statusError) throw new Error(statusError.message);
@@ -556,13 +577,23 @@ async function insertImportedRows(sb: any, sheetIdValue: string, rows: Array<{ c
   if (lastError) throw new Error(lastError.message);
   const payload = rows.map((row, index) => ({ sheet_id: sheetIdValue, position: (last?.position ?? 0) + index + 1, caption: row.caption, video_url: row.video_url, priority: row.priority ?? null, weight: row.weight ?? null, status: "pending" }));
   if (!payload.length) return { inserted: 0 };
-  const { data: inserted, error } = await sb.from("sheet_mode_rows").insert(payload).select("id");
-  if (error) throw new Error(error.message);
-  if ((targets ?? []).length && (inserted ?? []).length) {
-    const { error: statusError } = await sb.from("sheet_mode_row_channel_status").insert((inserted ?? []).flatMap((row: { id: string }) => (targets ?? []).map((target: { id: string }) => ({ row_id: row.id, channel_target_id: target.id, status: "F" }))));
-    if (statusError) throw new Error(statusError.message);
+  // Chunked so a 3000+ row import never sends one oversized statement.
+  let insertedCount = 0;
+  for (const batch of chunk(payload, 500)) {
+    const { data: inserted, error } = await sb.from("sheet_mode_rows").insert(batch).select("id");
+    if (error) throw new Error(error.message);
+    insertedCount += inserted?.length ?? 0;
+    if ((targets ?? []).length && (inserted ?? []).length) {
+      const pairs = (inserted ?? []).flatMap((row: { id: string }) =>
+        (targets ?? []).map((target: { id: string }) => ({ row_id: row.id, channel_target_id: target.id, status: "F" })),
+      );
+      for (const statusBatch of chunk(pairs, 500)) {
+        const { error: statusError } = await sb.from("sheet_mode_row_channel_status").insert(statusBatch);
+        if (statusError) throw new Error(statusError.message);
+      }
+    }
   }
-  return { inserted: inserted?.length ?? 0 };
+  return { inserted: insertedCount };
 }
 
 export const importSheetModeRows = createServerFn({ method: "POST" })
