@@ -422,11 +422,12 @@ export const addSheetModeChannelTargets = createServerFn({ method: "POST" })
         removed_at: null,
       }, { onConflict: "sheet_id,buffer_connection_id,channel_id" }).select("id").single();
       if (error) throw new Error(error.message);
-      const { data: rows, error: rowsError } = await context.supabase.from("sheet_mode_rows").select("id").eq("sheet_id", data.sheet_id);
-      if (rowsError) throw new Error(rowsError.message);
-      if (rows?.length) {
+      const rows = await selectAll<{ id: string }>((from, to) =>
+        context.supabase.from("sheet_mode_rows").select("id").eq("sheet_id", data.sheet_id).order("position", { ascending: true }).range(from, to) as any,
+      );
+      for (const batch of chunk(rows, 500)) {
         const { error: statusError } = await context.supabase.from("sheet_mode_row_channel_status").upsert(
-          rows.map((row) => ({ row_id: row.id, channel_target_id: inserted.id, status: "F" })),
+          batch.map((row) => ({ row_id: row.id, channel_target_id: inserted.id, status: "F" })),
           { onConflict: "row_id,channel_target_id" },
         );
         if (statusError) throw new Error(statusError.message);
