@@ -378,12 +378,12 @@ export const getSheetModeSheet = createServerFn({ method: "GET" })
     if (targetsResult.error) throw new Error(targetsResult.error.message);
 
     const statusesByRow = new Map<string, SheetModeChannelStatus[]>();
-    if (rows.length) {
+    for (const batch of chunk(rows.map((row: any) => row.id), 200)) {
       const statuses = await selectAll<SheetModeChannelStatus>((from, to) =>
         context.supabase
           .from("sheet_mode_row_channel_status")
-          .select("*, sheet_mode_rows!inner(sheet_id)")
-          .eq("sheet_mode_rows.sheet_id", data.id)
+          .select("*")
+          .in("row_id", batch)
           .order("row_id", { ascending: true })
           .range(from, to) as any,
       );
