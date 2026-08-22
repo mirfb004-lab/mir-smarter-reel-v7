@@ -577,13 +577,23 @@ async function insertImportedRows(sb: any, sheetIdValue: string, rows: Array<{ c
   if (lastError) throw new Error(lastError.message);
   const payload = rows.map((row, index) => ({ sheet_id: sheetIdValue, position: (last?.position ?? 0) + index + 1, caption: row.caption, video_url: row.video_url, priority: row.priority ?? null, weight: row.weight ?? null, status: "pending" }));
   if (!payload.length) return { inserted: 0 };
-  const { data: inserted, error } = await sb.from("sheet_mode_rows").insert(payload).select("id");
-  if (error) throw new Error(error.message);
-  if ((targets ?? []).length && (inserted ?? []).length) {
-    const { error: statusError } = await sb.from("sheet_mode_row_channel_status").insert((inserted ?? []).flatMap((row: { id: string }) => (targets ?? []).map((target: { id: string }) => ({ row_id: row.id, channel_target_id: target.id, status: "F" }))));
-    if (statusError) throw new Error(statusError.message);
+  // Chunked so a 3000+ row import never sends one oversized statement.
+  let insertedCount = 0;
+  for (const batch of chunk(payload, 500)) {
+    const { data: inserted, error } = await sb.from("sheet_mode_rows").insert(batch).select("id");
+    if (error) throw new Error(error.message);
+    insertedCount += inserted?.length ?? 0;
+    if ((targets ?? []).length && (inserted ?? []).length) {
+      const pairs = (inserted ?? []).flatMap((row: { id: string }) =>
+        (targets ?? []).map((target: { id: string }) => ({ row_id: row.id, channel_target_id: target.id, status: "F" })),
+      );
+      for (const statusBatch of chunk(pairs, 500)) {
+        const { error: statusError } = await sb.from("sheet_mode_row_channel_status").insert(statusBatch);
+        if (statusError) throw new Error(statusError.message);
+      }
+    }
   }
-  return { inserted: inserted?.length ?? 0 };
+  return { inserted: insertedCount };
 }
 
 export const importSheetModeRows = createServerFn({ method: "POST" })
