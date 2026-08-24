@@ -199,11 +199,10 @@ durable visual + copy lessons for this campaign.`;
   return report;
 }
 
-async function stepAnalyzeVideo(sb: Sb, userId: string, runId: string, url: string, aiSettings: AISettingsSchema, visionPrompt: string) {
-  // Cloudinary percent offsets use the "p" suffix (so_25p); a literal "%" 400s.
-  const candidates = ["auto", "25p", "50p", "75p"].map((o) => cloudinaryThumb(url, o));
-  const ok = await usableFrames(candidates);
-  const frames = ok.length ? ok : [cloudinaryThumb(url, "0")];
+async function stepAnalyzeVideo(sb: Sb, userId: string, runId: string, frames: string[], aiSettings: AISettingsSchema, visionPrompt: string) {
+  const promptText = frames.length
+    ? visionPrompt
+    : `${visionPrompt}\n\nNOTE: No video frames are available for this item yet (open the Loop queue in the browser to prepare them). Infer conservatively from the campaign context and avoid inventing specific visual details.`;
 
   const result = await withRetry("ai",
     async () => executeAIRequest(aiSettings, (model) => generateText({
@@ -211,11 +210,12 @@ async function stepAnalyzeVideo(sb: Sb, userId: string, runId: string, url: stri
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: visionPrompt },
+          { type: "text", text: promptText },
           ...frames.map((u) => ({ type: "image" as const, image: u })),
         ],
       }],
-    }), { requiresVision: true }),
+    } as any), frames.length ? { requiresVision: true } : undefined),
+
     async (attempt, err, durationMs) => {
       await audit(sb, {
         userId, runId, eventType: err ? "ai.retry" : "ai.response",
