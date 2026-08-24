@@ -87,7 +87,7 @@ async function stepAnalyzePrevious(
     .select(`id, run_number, started_at,
       captions(text,hashtags,cta,hook,length),
       video_analyses(summary,topic,objects,scene,actions,emotions),
-      video_queue!runs_queue_item_id_fkey(cloudinary_url),
+      video_queue!runs_queue_item_id_fkey(cloudinary_url,ai_frames),
       published_posts(posted_at,permalink,post_analytics(views,likes,comments,shares,saves,reach,impressions))`)
     .eq("user_id", userId).eq("status", "complete").neq("id", runId)
     .order("started_at", { ascending: false }).limit(Math.max(1, Math.min(lookback, 10)));
