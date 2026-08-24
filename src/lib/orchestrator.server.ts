@@ -106,11 +106,13 @@ async function stepAnalyzePrevious(
     analytics: r.published_posts?.[0]?.post_analytics?.[0] ?? null,
   }));
 
-  // Visual context: one frame per previous video so the model can *see* what
-  // performed well or badly in this campaign, not just read the caption.
-  const frameUrls = await usableFrames(
-    compact.filter((c) => c.video_url).slice(0, 4).map((c) => cloudinaryThumb(c.video_url as string, "auto")),
-  );
+  // Visual context: one cached browser-extracted frame per previous video so the
+  // model can *see* what performed well or badly in this campaign.
+  const frameUrls = history
+    .slice(0, 4)
+    .map((r: any) => framesToDataUrls(r.video_queue?.ai_frames, 1)[0])
+    .filter((f: string | undefined): f is string => Boolean(f));
+
 
   const cap = compact[0].caption;
   const analytics = compact[0].analytics;
