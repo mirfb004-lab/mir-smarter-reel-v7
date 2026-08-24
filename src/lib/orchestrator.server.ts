@@ -720,7 +720,9 @@ async function executeSteps(sb: Sb, userId: string, run: any, channel: any, stat
     // Step: analyze video
     if (!state.analyze_video?.done) {
       await refreshHeartbeat(sb, runId, channelId);
-      const summary = await stepAnalyzeVideo(sb, userId, runId, queueUrl, aiSettings, promptVer.vision_prompt);
+      const cachedFrames = queueItemId ? await loadQueueFrames(sb, queueItemId) : [];
+      const summary = await stepAnalyzeVideo(sb, userId, runId, cachedFrames, aiSettings, promptVer.vision_prompt);
+
       state.analyze_video = { done: true, summary };
       await persistStepState(sb, runId, state, "strategy");
     }
