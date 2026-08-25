@@ -29,6 +29,8 @@ const upsertSchema = z.object({
   cloudinary_transform_enabled: z.boolean().optional(),
   cloudinary_transform: z.string().max(1000).optional(),
   cloudinary_transform_mode: z.enum(["replace", "stack"]).optional(),
+  frame_sampling_seconds: z.number().int().min(1).max(120).optional(),
+
 });
 
 export const upsertCampaign = createServerFn({ method: "POST" })
