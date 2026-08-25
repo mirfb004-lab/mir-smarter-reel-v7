@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Play, Sparkles, TrendingUp, Clock, ListVideo, CheckCircle2, XCircle, Brain } from "lucide-react";
 import { toast } from "sonner";
 import { ChannelSelect } from "@/components/channel-picker";
+import { FrameExtractionRunner } from "@/components/frame-extraction-runner";
 import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({ component: DashboardPage });
