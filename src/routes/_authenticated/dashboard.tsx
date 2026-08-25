@@ -51,6 +51,8 @@ function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Your adaptive publishing loop at a glance.</p>
+          <FrameExtractionRunner />
+
         </div>
         <div className="flex gap-2 items-center">
           <ChannelSelect channels={chans ?? []} value={channelId} onValueChange={setChannelId} placeholder="Select a channel" className="w-56" />
