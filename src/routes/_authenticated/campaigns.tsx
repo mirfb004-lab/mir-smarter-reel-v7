@@ -53,6 +53,8 @@ function CampaignsPage() {
   const reset = useServerFn(resetCampaign);
   const updatePublishing = useServerFn(updateCampaignPublishing);
   const updateCloudinary = useServerFn(updateCampaignCloudinaryTransform);
+  const updateFrameSampling = useServerFn(updateCampaignFrameSampling);
+
   const listSamples = useServerFn(listSampleCaptions);
   const createSample = useServerFn(createSampleCaption);
   const updateSample = useServerFn(updateSampleCaption);
