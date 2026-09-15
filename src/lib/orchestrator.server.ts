@@ -787,10 +787,16 @@ async function executeSteps(sb: Sb, userId: string, run: any, channel: any, stat
 
     // Step: finalize
     if (queueItemId && options.finalizeQueue !== false) {
+      // Cached browser-extracted frames are temporary: drop them once the caption
+      // is written and the post is published, so they don't accumulate storage.
       await sb.from("video_queue").update({
         status: "done", processed_at: new Date().toISOString(), error: null,
+        ai_frames: null, ai_frames_at: null,
       }).eq("id", queueItemId);
+    } else if (queueItemId) {
+      await sb.from("video_queue").update({ ai_frames: null, ai_frames_at: null }).eq("id", queueItemId);
     }
+
     await sb.from("runs").update({
       status: "complete", finished_at: new Date().toISOString(),
       duration_ms: Date.now() - t0,
