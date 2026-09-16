@@ -5,7 +5,9 @@ import { z } from "zod";
 // Read-only usage reporting + safe cleanup of temporary AI preview frames / old logs.
 // Nothing here touches uploads, Cloudinary media, Buffer dispatch, Formula or Sheet Mode.
 
-type Json = Record<string, unknown>;
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+type Json = { [key: string]: JsonValue };
+
 
 const FREE_DB_BYTES = 500 * 1024 * 1024; // Cloud database soft limit
 const FREE_STORAGE_BYTES = 1024 * 1024 * 1024; // Cloud file storage soft limit
